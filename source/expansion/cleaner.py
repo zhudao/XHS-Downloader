@@ -30,7 +30,7 @@ class Cleaner:
                 "|": "",
                 "<": "",
                 ">": "",
-                "\"": "",
+                '"': "",
                 "?": "",
                 ":": "",
                 "*": "",
@@ -68,10 +68,10 @@ class Cleaner:
         return text
 
     def filter_name(
-            self,
-            text: str,
-            replace: str = "",
-            default: str = "",
+        self,
+        text: str,
+        replace: str = "",
+        default: str = "",
     ) -> str:
         """过滤文件夹名称中的非法字符"""
         text = text.replace(":", ".")
@@ -80,7 +80,10 @@ class Cleaner:
 
         text = self.filter(text)
 
-        text = replace_emoji(text, replace, )
+        text = replace_emoji(
+            text,
+            replace,
+        )
 
         text = self.clear_spaces(text)
 
@@ -94,9 +97,16 @@ class Cleaner:
         return " ".join(string.split())
 
     @classmethod
-    def remove_control_characters(cls, text, replace="", ):
+    def remove_control_characters(
+        cls,
+        text,
+        replace="",
+    ):
         # 使用正则表达式匹配所有控制字符
-        return cls.CONTROL_CHARACTERS.sub(replace, text, )
+        return cls.CONTROL_CHARACTERS.sub(
+            replace,
+            text,
+        )
 
 
 if __name__ == "__main__":

@@ -1,20 +1,14 @@
 from rich.text import Text
-from textual import on
-from textual import work
+from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
-from textual.widgets import Button
-from textual.widgets import Footer
-from textual.widgets import Header
-from textual.widgets import Label
-from textual.widgets import RichLog
+from textual.widgets import Button, Footer, Header, Label, RichLog
 
 from ..application import XHS
 from ..module import (
-    PROJECT,
-    MASTER,
     INFO,
+    PROJECT,
 )
 from ..translation import _
 
@@ -27,9 +21,13 @@ class Monitor(Screen):
         Binding(key="C", action="close", description=_("关闭监听")),
     ]
 
-    def __init__(self, app: XHS, ):
+    def __init__(
+        self,
+        app: XHS,
+    ):
         super().__init__()
         self.xhs = app
+        self._previous_print_func = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -44,22 +42,26 @@ class Monitor(Screen):
 
     @work(exclusive=True)
     async def run_monitor(self):
-        await self.xhs.monitor(download=True, log=self.query_one(RichLog), data=False, )
+        await self.xhs.monitor()
         await self.action_close()
 
     def on_mount(self) -> None:
         self.title = PROJECT
-        self.query_one(RichLog).write(
-            Text(_(
-                "程序会自动读取并提取剪贴板中的小红书作品链接，并自动下载链接对应的作品文件，如需关闭，请点击关闭按钮，或者向剪贴板写入 “close” 文本！"),
-                style=MASTER),
-            scroll_end=True,
-        )
+        self._previous_print_func = self.xhs.print.func
+        self.xhs.print.func = self.query_one(RichLog)
         self.run_monitor()
+
+    def _restore_print_func(self) -> None:
+        if self._previous_print_func is not None:
+            self.xhs.print.func = self._previous_print_func
 
     async def action_close(self):
         self.xhs.stop_monitor()
+        self._restore_print_func()
         await self.app.action_back()
+
+    def on_unmount(self) -> None:
+        self._restore_print_func()
 
     async def action_quit(self) -> None:
         await self.action_close()

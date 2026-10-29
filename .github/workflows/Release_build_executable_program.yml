@@ -1,57 +1,132 @@
-name: 发布构建可执行文件
+name: 自动构建并发布可执行文件
 
 on:
   release:
-    types: [ created ]
+    types: [ published ]
 
 permissions:
   contents: write
-  discussions: write
 
 jobs:
   build:
     name: 构建于 ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+
+    env:
+      PYTHONUTF8: "1"
+      UV_DEFAULT_INDEX: https://pypi.org/simple
+      SIGNPATH_AVAILABLE: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+
     strategy:
+      fail-fast: false
       matrix:
-        os: [ macos-latest, windows-latest, macos-13 ]
+        include:
+          - os: windows-latest
+            sign: true
+            executable: dist/XHS-Downloader/XHS-Downloader.exe
+            artifact: Windows_X64
+
+          - os: windows-11-arm
+            sign: true
+            executable: dist/XHS-Downloader/XHS-Downloader.exe
+            artifact: Windows_ARM64
+
+          - os: macos-15-intel
+            sign: false
+            executable: dist/XHS-Downloader/XHS-Downloader
+            artifact: macOS_X64
+
+          - os: macos-latest
+            sign: false
+            executable: dist/XHS-Downloader/XHS-Downloader
+            artifact: macOS_ARM64
 
     steps:
       - name: 签出存储库
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: 设置 Python
-        uses: actions/setup-python@v5
+      - name: 设置 uv
+        uses: astral-sh/setup-uv@v9.0.0
         with:
-          python-version: "3.12"
+          enable-cache: true
 
       - name: 安装依赖项
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          uv python install 3.12
+          uv sync --frozen --no-dev --no-install-project --python 3.12
+          uv pip install cx_Freeze
 
-      - name: 构建 Win 可执行文件
-        if: runner.os == 'Windows'
-        run: |
-          pyinstaller --icon=./static/XHS-Downloader.ico --add-data "static:static" --add-data "locale:locale" --collect-all emoji main.py
-        shell: pwsh
+      - name: 构建可执行文件
+        run: uv run python setup.py build_exe --build-exe dist/XHS-Downloader
 
-      - name: 构建 Mac 可执行文件
-        if: runner.os == 'macOS'
-        run: |
-          pyinstaller --icon=./static/XHS-Downloader.icns --add-data "static:static" --add-data "locale:locale" --collect-all emoji main.py
+      - name: 验证可执行文件
+        run: >-
+          uv run python -c
+          "import subprocess; subprocess.run([r'${{ matrix.executable }}', '--version'], check=True)"
 
-      - name: 创建压缩包
-        run: |
-          7z a "XHS-Downloader_V${{ github.event.release.tag_name }}_${{ runner.os }}_${{ runner.arch }}.zip" ./dist/main/*
-        shell: bash
-
-      - name: 上传文件到 release
-        uses: softprops/action-gh-release@v2
+      - name: 上传待签名构建产物
+        if: matrix.sign && env.SIGNPATH_AVAILABLE == 'true'
+        id: upload-artifact
+        uses: actions/upload-artifact@v7
         with:
-          files: |
-            ./XHS-Downloader_V*.zip
+          name: ${{ matrix.artifact }}
+          path: dist/XHS-Downloader
+          if-no-files-found: error
+
+      - name: SignPath 签名
+        if: matrix.sign && env.SIGNPATH_AVAILABLE == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: bddfd48a-44b7-4ab4-a51c-cd6e84db7534
+          project-slug: XHS-Downloader
+          signing-policy-slug: test-signing
+          github-artifact-id: ${{ steps.upload-artifact.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: 创建签名版本压缩包
+        if: matrix.sign && env.SIGNPATH_AVAILABLE == 'true'
+        run: |
+          uv run python -c "import shutil; shutil.make_archive('XHS-Downloader_V${{ github.event.release.tag_name }}_${{ matrix.artifact }}', 'zip', 'signed')"
+
+      - name: 创建未签名 Windows 压缩包
+        if: matrix.sign && env.SIGNPATH_AVAILABLE != 'true'
+        run: |
+          uv run python -c "import shutil; shutil.make_archive('XHS-Downloader_V${{ github.event.release.tag_name }}_${{ matrix.artifact }}', 'zip', 'dist/XHS-Downloader')"
+
+      - name: 创建 macOS 压缩包
+        if: ${{ !matrix.sign }}
+        run: |
+          uv run python -c "import shutil; shutil.make_archive('XHS-Downloader_V${{ github.event.release.tag_name }}_${{ matrix.artifact }}', 'zip', 'dist/XHS-Downloader')"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./XHS-Downloader_V${{ github.event.release.tag_name }}_${{ matrix.artifact }}.zip
+          overwrite: true
+          if-no-files-found: error
+
+  release:
+    name: 发布 Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 签出存储库
+        uses: actions/checkout@v7
+
+      - name: 下载构建产物
+        uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: 发布文件到 Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ./release-assets/*.zip
           name: XHS-Downloader V${{ github.event.release.tag_name }}
           body_path: ./static/Release_Notes.md
           draft: ${{ github.event.release.draft }}

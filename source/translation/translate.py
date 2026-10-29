@@ -1,8 +1,14 @@
+from contextlib import suppress
 from gettext import translation
-from locale import getlocale
+from locale import Error, LC_ALL, getlocale, setlocale
 from pathlib import Path
+import sys
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent.parent
+)
 
 
 class TranslationManager:
@@ -18,7 +24,7 @@ class TranslationManager:
     def __init__(self, domain="xhs", localedir=None):
         self.domain = domain
         if not localedir:
-            localedir = ROOT.joinpath('locale')
+            localedir = ROOT.joinpath("locale")
         self.localedir = Path(localedir)
         self.current_translator = self.setup_translation(
             self.get_language_code(),
@@ -27,8 +33,23 @@ class TranslationManager:
     @staticmethod
     def get_language_code() -> str:
         # 获取当前系统的语言和区域设置
+        with suppress(Error):
+            setlocale(LC_ALL, "")
         language_code, __ = getlocale()
-        return "zh_CN" if "Chinese" in language_code else "en_US"
+        if not language_code:
+            return "en_US"
+        return (
+            "zh_CN"
+            if any(
+                s in language_code.upper()
+                for s in (
+                    "CHINESE",
+                    "ZH",
+                    "CHINA",
+                )
+            )
+            else "en_US"
+        )
 
     def setup_translation(self, language: str = "zh_CN"):
         """设置gettext翻译环境"""
@@ -41,7 +62,8 @@ class TranslationManager:
             )
         except FileNotFoundError as e:
             print(
-                f"Warning: Translation files for '{self.domain}' not found. Error: {e}")
+                f"Warning: Translation files for '{self.domain}' not found. Error: {e}"
+            )
             return translation(self.domain, fallback=True)
 
     def switch_language(self, language: str = "en_US"):
