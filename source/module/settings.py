@@ -27,7 +27,8 @@ class Settings:
         "image_format": "JPEG",  # 图文作品格式
         "image_download": True,  # 是否下载图文
         "video_download": True,  # 是否下载视频
-        "video_cover_download": False,  # 是否下载视频封面
+        "album_download_mode": "images",  # 图集作品下载形式
+        "cover_download": False,  # 是否下载作品封面
         "live_download": False,  # 是否下载动图
         "video_preference": "resolution",  # 视频文件偏好
         "folder_mode": False,  # 文件夹归档模式

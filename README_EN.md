@@ -70,8 +70,11 @@
 <ul>
 <li><code>https://www.xiaohongshu.com/explore/NoteID?xsec_token=XXX</code></li>
 <li><code>https://www.xiaohongshu.com/discovery/item/NoteID?xsec_token=XXX</code></li>
+<li><code>https://www.rednote.com/discovery/item/NoteID?xsec_token=XXX</code></li>
 <li><code>https://www.xiaohongshu.com/user/profile/AuthorID/NoteID?xsec_token=XXX</code></li>
+<li><code>https://www.rednote.com/user/profile/AuthorID/NoteID?xsec_token=XXX</code></li>
 <li><code>https://xhslink.com/ShareCode</code></li>
+<li><code>https://xhslink.cn/ShareCode</code></li>
 <br/>
 <p><b>Supports entering multiple notes links at once, separated by spaces; the program will automatically extract valid links without additional processing!</b></p>
 </ul>
@@ -294,6 +297,8 @@ async def example_api():
 <p><b>Modify user script language</b></p>
 <img src="static/screenshot/脚本切换语言.png" alt="切换语言">
 <h2>🌐 Connect to Server</h2>
+<details>
+<summary>Server connection instructions, suitable for users who need to push download tasks from the userscript to the main program (click to expand)</summary>
 <p>⭐ This project supports interaction with the main program through a browser userscript, enabling one-click push of download tasks.</p>
 <ul><b>Function Description:</b>
 <li>In the project program's configuration file, you need to set the <code>script_server</code> parameter to <code>true</code></li>
@@ -302,6 +307,21 @@ async def example_api():
 <li>When you visit a post page in your browser, click the <code>Push Download Task</code> option in the userscript menu</li>
 <li>The userscript will send the download task to the project program, which will handle and download the files</li>
 </ul>
+<p>⭐ For a complete illustrated guide to pushing download tasks from the userscript to the program, see <a href="static/UserScript-Linked-Download-Tutorial.md">User Script and Program Linked Download Tutorial (Chinese)</a> or <a href="https://mp.weixin.qq.com/s/XOnT1P4AWxZn9rBHsRQFdA">WeChat article</a>!</p>
+<h3 id="chrome-device-access-permission">Chrome device access permission</h3>
+<p>The steps below use Chrome as an example. Permission names and settings may differ in other browsers.</p>
+<p>When the userscript connects to the program, Chrome may request permission to access other apps and services on this device. Select <b>Allow</b> when prompted.</p>
+<img src="static/screenshot/浏览器权限提示.png" alt="Chrome prompt asking to access other apps and services on this device">
+<hr>
+<p>The browser remembers permission choices, and the userscript cannot force the prompt to reappear. If no prompt appears or access was previously blocked, update the permission as follows:</p>
+<ol>
+<li>Open the RedNote page, click the site icon to the left of the address bar, then click <b>Site settings</b>.<br>
+<img src="static/screenshot/网站权限设置.png" alt="Site settings entry in the Chrome address bar menu"></li>
+<li>Find <b>Apps on device</b> and set it to <b>Allow</b>.<br>
+<img src="static/screenshot/浏览器网站设置.png" alt="Apps on device permission in Chrome Site settings"></li>
+<li>Return to the RedNote page and reload it.</li>
+</ol>
+</details>
 <h2>📜 Script Instructions</h2>
 <ul>
 <li>When downloading notes from RedNote, the script requires time to process the files. Please wait for a moment and do not click the download button multiple times.</li>
@@ -324,7 +344,7 @@ async def example():
     folder_name = "Download"  # Folder name for storing note files (auto-created), default: Download
     name_format = "作品标题 作品描述"
     impersonate = "chrome146"  # Browser Impersonate Targets
-    cookie = ""  # Xiaohongshu web Cookie
+    cookie = ""  # RedNote web Cookie
     proxy = None  # Network proxy
     proxy_download = False  # Whether to use the network proxy from the proxy parameter when downloading files
     timeout = 5  # Request timeout limit, unit: seconds
@@ -336,7 +356,8 @@ async def example():
     folder_mode = False  # Whether to store each note's files in a separate folder
     image_download = True  # Image/album note download switch
     video_download = True  # Video note download switch
-    video_cover_download = False  # Video note cover download switch
+    album_download_mode = "images"  # Album note download format: images or video
+    cover_download = False  # Note cover download switch
     live_download = False  # Image GIF file download switch
     download_record = True  # Whether to record successfully downloaded note IDs
     language = "zh_CN"  # Set program prompt language
@@ -363,7 +384,8 @@ async def example():
         folder_mode=folder_mode,
         image_download=image_download,
         video_download=video_download,
-        video_cover_download=video_cover_download,
+        album_download_mode=album_download_mode,
+        cover_download=cover_download,
         live_download=live_download,
         download_record=download_record,
         language=language,
@@ -509,9 +531,15 @@ async def example():
 <td align="center">true</td>
 </tr>
 <tr>
-<td align="center">video_cover_download</td>
+<td align="center">album_download_mode</td>
+<td align="center">str</td>
+<td align="center">Album note download format: <code>images</code> or <code>video</code></td>
+<td align="center">images</td>
+</tr>
+<tr>
+<td align="center">cover_download</td>
 <td align="center">bool</td>
-<td align="center">Switch for downloading video notes cover files; the cover format is the same as the image_format params</td>
+<td align="center">Note cover download switch for video and album notes; the cover format is the same as the image_format parameter</td>
 <td align="center">false</td>
 </tr>
 <tr>
@@ -597,7 +625,7 @@ async def example():
 </details>
 <h1 id="cookie">🌐 Cookie</h1>
 <ol>
-<li>Open the browser (optional: start in incognito mode) and visit <code>https://www.xiaohongshu.com/explore</code></li>
+<li>Open the browser (optional: start in incognito mode) and visit a RedNote page</li>
 <li>Log in to your RedNote account (can be skipped)</li>
 <li>Press <code>F12</code> to open the developer tools</li>
 <li>Select the <code>Network</code> tab</li>

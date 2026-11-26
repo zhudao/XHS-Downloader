@@ -115,18 +115,16 @@ class XHS:
     VERSION_MINOR = VERSION_MINOR
     VERSION_BETA = VERSION_BETA
     LINK_XHS = compile(r"(?:https?://)?www\.xiaohongshu\.com/explore/\S+")
-    LINK_RN = compile(r"(?:https?://)?www\.rednote\.com/explore/\S+")
-    USER_XHS = compile(
-        r"(?:https?://)?www\.xiaohongshu\.com/user/profile/[a-z0-9]+/\S+"
+    USER = compile(
+        r"(?:https?://)?www\.(?:xiaohongshu|rednote)\.com/user/profile/[a-z0-9]+/\S+"
     )
-    USER_RN = compile(r"(?:https?://)?www\.rednote\.com/user/profile/[a-z0-9]+/\S+")
-    SHARE_XHS = compile(r"(?:https?://)?www\.xiaohongshu\.com/discovery/item/\S+")
-    SHARE_RN = compile(r"(?:https?://)?www\.rednote\.com/discovery/item/\S+")
+    SHARE = compile(
+        r"(?:https?://)?www\.(?:xiaohongshu|rednote)\.com/discovery/item/\S+"
+    )
     SHORT = compile(
         r"(?:https?://)?xhslink\.(?:com|cn)/[^\s\"<>\\^`{|}，。；！？、【】《》]+"
     )
-    ID = compile(r"(?:explore|item)/(\S+)?\?")
-    ID_USER = compile(r"user/profile/[a-z0-9]+/(\S+)?\?")
+    ID = compile(r"(?:explore|item|user/profile/[a-z0-9]+)/(\S+)?\?")
     __INSTANCE = None
     CLEANER = Cleaner()
 
@@ -153,7 +151,7 @@ class XHS:
         image_format="JPEG",
         image_download=True,
         video_download=True,
-        video_cover_download=False,
+        cover_download=False,
         live_download=False,
         video_preference="resolution",
         folder_mode=False,
@@ -166,6 +164,7 @@ class XHS:
         note_format: str = "",
         script_host="0.0.0.0",
         script_port=5558,
+        album_download_mode="images",
         **kwargs,
     ):
         switch_language(language)
@@ -188,7 +187,7 @@ class XHS:
             image_format,
             image_download,
             video_download,
-            video_cover_download,
+            cover_download,
             live_download,
             video_preference,
             download_record,
@@ -199,6 +198,7 @@ class XHS:
             note_format,
             self.CLEANER,
             self.print,
+            album_download_mode=album_download_mode,
         )
         self.mapping_data = mapping_data or {}
         self.map_recorder = MapRecorder(
@@ -225,10 +225,13 @@ class XHS:
         )
 
     def __extract_image(self, container: dict, data: Namespace):
-        container["下载地址"], container["动图地址"] = self.image.get_image_link(
-            data, self.manager.image_format
-        )
-        container["封面地址"] = None
+        links, lives = self.image.get_image_link(data, self.manager.image_format)
+        if container["作品类型"] == _("图集"):
+            container["封面地址"] = links[0] if links else None
+            links, lives = links[1:], lives[1:]
+        else:
+            container["封面地址"] = None
+        container["下载地址"], container["动图地址"] = links, lives
 
     def __extract_video(
         self,
@@ -418,17 +421,11 @@ class XHS:
                     False,
                     proxy=proxy,
                 )
-            if u := self.SHARE_XHS.search(i):
-                urls.append(u.group())
-            elif u := self.SHARE_RN.search(i):
+            if u := self.SHARE.search(i):
                 urls.append(u.group())
             elif u := self.LINK_XHS.search(i):
                 urls.append(u.group())
-            elif u := self.LINK_RN.search(i):
-                urls.append(u.group())
-            elif u := self.USER_XHS.search(i):
-                urls.append(u.group())
-            elif u := self.USER_RN.search(i):
+            elif u := self.USER.search(i):
                 urls.append(u.group())
         return urls
 
@@ -436,8 +433,6 @@ class XHS:
         ids = []
         for i in links:
             if j := self.ID.search(i):
-                ids.append(j.group(1))
-            elif j := self.ID_USER.search(i):
                 ids.append(j.group(1))
         return ids
 
@@ -500,12 +495,10 @@ class XHS:
         progress_callback: Callable[[dict], None] | None = None,
         task_id: str | None = None,
     ):
-        if data["作品类型"] == _("视频"):
+        download_type = self.downloader.get_download_type(data["作品类型"])
+        if download_type == _("视频"):
             self.__extract_video(data, namespace)
-        elif data["作品类型"] in {
-            _("图文"),
-            _("图集"),
-        }:
+        elif download_type == _("图文"):
             self.__extract_image(data, namespace)
         else:
             self.logging(_("未知的作品类型：{0}").format(id_), WARNING)
@@ -902,7 +895,9 @@ class XHS:
                 支持的作品链接格式：
                 - https://www.xiaohongshu.com/explore/...
                 - https://www.xiaohongshu.com/discovery/item/...
+                - https://www.rednote.com/discovery/item/...
                 - https://xhslink.com/...
+                - https://xhslink.cn/...
                 
                 get_detail_data
                 功能：输入小红书作品链接，返回该作品的信息数据，不会下载文件。
@@ -935,7 +930,9 @@ class XHS:
                 url（必填）：小红书作品链接，格式如：
                 - https://www.xiaohongshu.com/explore/...
                 - https://www.xiaohongshu.com/discovery/item/...
+                - https://www.rednote.com/discovery/item/...
                 - https://xhslink.com/...
+                - https://xhslink.cn/...
                 
                 返回：
                 - message：结果提示
@@ -976,7 +973,9 @@ class XHS:
                 url（必填）：小红书作品链接，格式如：
                 - https://www.xiaohongshu.com/explore/...
                 - https://www.xiaohongshu.com/discovery/item/...
+                - https://www.rednote.com/discovery/item/...
                 - https://xhslink.com/...
+                - https://xhslink.cn/...
                 index（选填）：根据用户指定的图片序号（如用户说“下载第1和第3张”时，index应为 [1, 3]），生成由所需图片序号组成的列表；如果用户未指定序号，则该字段为 None
                 return_data（可选）：是否返回作品信息数据；如需返回作品信息数据，设置此参数为 true，默认值为 false
                 

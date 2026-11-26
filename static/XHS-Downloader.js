@@ -2,7 +2,7 @@
 // @name           XHS-Downloader
 // @namespace      xhs_downloader
 // @homepage       https://github.com/JoeanAmier/XHS-Downloader
-// @version        2.5.4
+// @version        2.5.8
 // @tag            小红书
 // @tag            RedNote
 // @tag            XiaoHongShu
@@ -114,12 +114,15 @@ KS-Downloader（快手、KuaiShou）：https://github.com/JoeanAmier/KS-Download
             linkCheckboxSwitchDesc: '关闭后，提取作品链接时无需确认直接提取全部链接',
             imageCheckboxSwitchLabel: '图片下载选择模式',
             imageCheckboxSwitchDesc: '关闭后，下载图文作品时无需确认直接下载全部文件',
+            albumDownloadModeLabel: '图集作品下载形式',
+            albumDownloadModeDesc: '以图片或视频形式下载图集作品文件',
+            albumDownloadModeOptions: {images: '图片', video: '视频'},
             keepMenuVisibleLabel: '菜单保持显示',
             keepMenuVisibleDesc: '启用后，功能菜单无需鼠标悬停始终保持显示',
             scriptServerURLLabel: 'WebSocket 服务器地址',
             scriptServerURLDesc: '用户脚本连接的 WebSocket 服务器',
             scriptServerSwitchLabel: '连接服务器',
-            scriptServerSwitchDesc: '启用后，可以把作品下载任务推送至服务器',
+            scriptServerSwitchDesc: '启用后，可以把作品下载任务推送至服务器。如浏览器询问设备访问权限，请选择“允许”。',
             imageDownloadFormatLabel: '图片下载格式',
             imageDownloadFormatDesc: '图文作品文件下载格式',
             videoPreferenceLabel: '视频下载偏好',
@@ -192,7 +195,7 @@ KS-Downloader（快手、KuaiShou）：https://github.com/JoeanAmier/KS-Download
             aboutXHSText: '关于 XHS-Downloader',
             aboutXHSDescription: '查看 XHS-Downloader 更多信息',
             imageCheckboxTitle: '请选中需要下载的图片',
-            scriptServerError: '脚本服务器连接出错，请检查网络连接或脚本服务器状态是否正常！',
+            scriptServerError: '脚本服务器连接失败，请检查网络连接、服务器地址、服务器状态或浏览器的网站设置。',
             pushTaskError: '脚本服务器未连接，请检查网络连接或脚本服务器状态是否正常！',
             scriptServerReconnect: '脚本服务器未连接，正在重连并推送任务...',
             scriptAuthTokenLabel: '鉴权令牌',
@@ -277,12 +280,15 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
             linkCheckboxSwitchDesc: 'If disabled, all links will be extracted immediately without confirmation',
             imageCheckboxSwitchLabel: 'Image Download Selection Mode',
             imageCheckboxSwitchDesc: 'If disabled, all images will be downloaded immediately without confirmation',
+            albumDownloadModeLabel: 'Album Note Download Format',
+            albumDownloadModeDesc: 'Download album note files as images or video.',
+            albumDownloadModeOptions: {images: 'Images', video: 'Video'},
             keepMenuVisibleLabel: 'Keep Menu Visible',
             keepMenuVisibleDesc: 'When enabled, the menu stays visible without needing a mouse hover',
             scriptServerURLLabel: 'WebSocket Server URL',
             scriptServerURLDesc: 'The WebSocket server address the script connects to',
             scriptServerSwitchLabel: 'Connect to Server',
-            scriptServerSwitchDesc: 'When enabled, download tasks can be pushed to the server',
+            scriptServerSwitchDesc: 'When enabled, download tasks can be pushed to the server. If the "Access other apps and services on this device" permission prompt appears, select "Allow".',
             imageDownloadFormatLabel: 'Image Download Format',
             imageDownloadFormatDesc: 'Preferred file format for downloading images',
             videoPreferenceLabel: 'Video download preferences',
@@ -355,7 +361,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
             aboutXHSText: 'About XHS-Downloader',
             aboutXHSDescription: '',
             imageCheckboxTitle: 'Please select images to download',
-            scriptServerError: 'Server connection error. Please check your network or server status!',
+            scriptServerError: 'Script server connection failed. Check your network, server address, server status, or browser site settings.',
             pushTaskError: 'Server not connected. Please check your network or server status!',
             scriptServerReconnect: 'Server disconnected. Reconnecting and pushing the task...',
             scriptAuthTokenLabel: 'Authentication Token',
@@ -403,6 +409,8 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
     const fileNameMaxLength = 128;
     const videoPreferenceValues = ["manual", "resolution", "bitrate", "size"];
     const normalizeVideoPreference = value => videoPreferenceValues.includes(value) ? value : "resolution";
+    const albumDownloadModeValues = ["images", "video"];
+    const normalizeAlbumDownloadMode = value => albumDownloadModeValues.includes(value) ? value : "images";
 
     // 解析文件名格式字段。
     const parseFileNameFormat = (value) => {
@@ -435,6 +443,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         imageCheckboxSwitch: GM_getValue("imageCheckboxSwitch", true),
         imageDownloadFormat: GM_getValue("imageDownloadFormat", "jpeg"),
         videoPreference: GM_getValue("videoPreference", "resolution"),
+        albumDownloadMode: GM_getValue("albumDownloadMode", "images"),
         scriptServerURL: GM_getValue("scriptServerURL", defaultsWebSocketURL),
         scriptServerSwitch: GM_getValue("scriptServerSwitch", false),
         scriptAuthToken: GM_getValue("scriptAuthToken", ""),
@@ -577,6 +586,11 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         GM_setValue("videoPreference", config.videoPreference);
     };
 
+    const updateAlbumDownloadMode = (value) => {
+        config.albumDownloadMode = normalizeAlbumDownloadMode(value);
+        GM_setValue("albumDownloadMode", config.albumDownloadMode);
+    };
+
     // 更新文件名格式配置。
     const updateFileNameFormat = (value) => {
         config.fileNameFormatKeys = parseFileNameFormat(value);
@@ -613,6 +627,17 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         resolution: "height",
         bitrate: "videoBitrate",
         size: "size",
+    };
+
+    const isImageNote = note => note.type === "normal" || (
+        note.type === "video" &&
+        note.imageList.length > 1
+    );
+
+    const getNormalDownloadFormat = note => {
+        if (note.type === "normal") return "images";
+        if (note.type === "video" && note.imageList.length > 1) return config.albumDownloadMode;
+        return "video";
     };
 
     const generateVideoUrl = note => {
@@ -709,6 +734,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         try {
             let items = []
             let {imageList} = note;
+            const indexOffset = note.type === "video" ? 0 : 1;
             if (urls.length !== imageList.length) {
                 console.error("图片数量不一致！")
                 return []
@@ -717,7 +743,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
                 const url = item.urlDefault || item.urlPre;
                 if (url) {
                     items.push({
-                                   webp: url, index: index + 1, url: urls[index],
+                                   webp: url, index: index + indexOffset, url: urls[index],
                                })
                 } else {
                     console.error("提取图片预览链接失败", item)
@@ -731,11 +757,11 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         }
     };
 
-    const download = async (urls, note, server = false,) => {
+    const download = async (urls, note, server = false, downloadFormat) => {
         const name = extractName(note);
         if (server) {
             let data = {data: note, index: null,};
-            if (note.type === "normal") {
+            if (isImageNote(note)) {
                 let items = extractImageWebpUrls(note, urls);
                 if (items.length === 0) {
                     console.error("解析图文作品数据失败", note)
@@ -753,7 +779,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
             webSocket.send(JSON.stringify(data));
         } else {
             console.debug(`文件名称 ${name}`);
-            if (note.type === "video") {
+            if (downloadFormat === "video") {
                 showToast(t.downloadTips);
                 await downloadVideo(urls[0], name);
             } else {
@@ -792,16 +818,32 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
 
     const exploreDeal = async (note, server = false,) => {
         try {
+            if (server && !isImageNote(note)) {
+                await download([], note, server,);
+                return;
+            }
+
             let links;
-            if (note.type === "normal") {
-                links = generateImageUrl(note);
+            let downloadFormat;
+            if (server) {
+                if (isImageNote(note)) {
+                    links = generateImageUrl(note);
+                } else {
+                    links = await selectVideoStream(note, server);
+                    if (links === null) return;
+                }
             } else {
-                links = await selectVideoStream(note, server);
-                if (links === null) return;
+                downloadFormat = getNormalDownloadFormat(note);
+                if (downloadFormat === "images") {
+                    links = generateImageUrl(note);
+                } else {
+                    links = await selectVideoStream(note, server);
+                    if (links === null) return;
+                }
             }
             if (links.length > 0) {
                 // console.debug("下载链接", links);
-                await download(links, note, server,);
+                await download(links, note, server, downloadFormat,);
             } else {
                 abnormal(t.downloadLinkError)
             }
@@ -903,16 +945,14 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         return false; // 如果所有尝试都失败，返回失败
     };
 
+    const imageFileName = (name, index) =>
+        `${name}${index ? `_${index}` : ""}.${GM_getValue("imageDownloadFormat", "jpeg")}`;
+
     const downloadFiles = async (items, name,) => {
         const downloadResults = []; // 用于存储下载结果
 
         const downloadPromises = items.map(async (item) => {
-            let fileName;
-            if (item.index) {
-                fileName = `${name}_${item.index}.${GM_getValue("imageDownloadFormat", "jpeg")}`; // 根据索引生成文件名
-            } else {
-                fileName = `${name}.${GM_getValue("imageDownloadFormat", "jpeg")}`;
-            }
+            const fileName = imageFileName(name, item.index);
             const result = await downloadFile(item.url, fileName, false); // 调用单个文件下载方法
             if (result) {
                 downloadResults.push({name: fileName, file: result});
@@ -1135,7 +1175,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
             for (let item of items) {
                 result.push(await downloadFile(
                     item.url,
-                    `${name}_${item.index}.${GM_getValue("imageDownloadFormat", "jpeg")}`
+                    imageFileName(name, item.index)
                 ));
             }
             success = result.every(item => item === true);
@@ -1270,6 +1310,12 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
 
     let style = document.createElement('style');
     style.textContent = `
+    :where(.xhs-downloader-ui),
+    .xhs-downloader-menu {
+        --xhs-downloader-primary: #1976d2;
+        --xhs-downloader-primary-rgb: 25, 118, 210;
+    }
+
     /* 通用弹窗遮罩 */
     :where(.xhs-downloader-ui)#SettingsOverlay,
     :where(.xhs-downloader-ui)#imageSelectionOverlay,
@@ -1378,7 +1424,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         cursor: pointer;
     }
     :where(.xhs-downloader-ui) .primary-btn {
-        background: #2196f3;
+        background: var(--xhs-downloader-primary);
         color: white;
     }
     :where(.xhs-downloader-ui) .secondary-btn {
@@ -1429,6 +1475,66 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         align-items: center;
         width: 100%;
     }
+    :where(.xhs-downloader-ui) .segmented-setting-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+    }
+    :where(.xhs-downloader-ui) .segmented-setting-header .setting-title {
+        flex: 1 1 120px;
+        min-width: 0;
+    }
+    :where(.xhs-downloader-ui) .segmented-control {
+        display: inline-flex;
+        flex: 0 0 auto;
+        margin-left: auto;
+        align-items: center;
+        gap: 2px;
+        padding: 3px;
+        border: 1px solid #dfe3e8;
+        border-radius: 999px;
+        background: #f1f3f5;
+    }
+    :where(.xhs-downloader-ui) .setting-item .segmented-control-option {
+        position: relative;
+        display: inline-flex;
+        width: auto;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        cursor: pointer;
+    }
+    :where(.xhs-downloader-ui) .segmented-control-option input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: 0;
+        opacity: 0;
+    }
+    :where(.xhs-downloader-ui) .segmented-control-option span {
+        display: block;
+        min-width: 48px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        color: #555;
+        font-size: 0.9rem;
+        line-height: 1.2;
+        text-align: center;
+        transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+    }
+    :where(.xhs-downloader-ui) .segmented-control-option input:checked + span {
+        background: var(--xhs-downloader-primary);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+        color: #fff;
+    }
+    :where(.xhs-downloader-ui) .segmented-control-option input:focus-visible + span {
+        outline: 2px solid var(--xhs-downloader-primary);
+        outline-offset: 2px;
+    }
     :where(.xhs-downloader-ui) .setting-title {
         font-size: 1rem;
         font-weight: 500;
@@ -1468,7 +1574,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         transition: transform 0.4s;
     }
     :where(.xhs-downloader-ui) input:checked + .slider {
-        background: #2196f3;
+        background: var(--xhs-downloader-primary);
     }
     :where(.xhs-downloader-ui) input:checked + .slider::before {
         transform: translateX(20px);
@@ -1509,8 +1615,8 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
     :where(.xhs-downloader-ui) .text-input:focus,
     :where(.xhs-downloader-ui) .select-input:focus {
         outline: none;
-        border-color: #2196f3;
-        box-shadow: 0 0 4px rgba(33, 150, 243, 0.3);
+        border-color: var(--xhs-downloader-primary);
+        box-shadow: 0 0 4px rgba(var(--xhs-downloader-primary-rgb), 0.3);
     }
     :where(.xhs-downloader-ui) .select-input:disabled {
         background-color: #f5f5f5;
@@ -1566,12 +1672,12 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         transition: background-color 0.15s, border-color 0.15s, opacity 0.15s;
     }
     :where(.xhs-downloader-ui) .file-name-card.available:not(.disabled):hover {
-        background: #f0f7ff;
-        border-color: #90caf9;
+        background: rgba(var(--xhs-downloader-primary-rgb), 0.05);
+        border-color: rgba(var(--xhs-downloader-primary-rgb), 0.35);
     }
     :where(.xhs-downloader-ui) .file-name-card.selected {
-        background: #eaf4ff;
-        border-color: #90caf9;
+        background: rgba(var(--xhs-downloader-primary-rgb), 0.08);
+        border-color: rgba(var(--xhs-downloader-primary-rgb), 0.35);
         cursor: grab;
     }
     :where(.xhs-downloader-ui) .file-name-card.selected:active {
@@ -1768,8 +1874,8 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
             border-color: #e6e6e6;
         }
         :where(.xhs-downloader-ui) .video-quality-item.selected {
-            border-color: #2196f3;
-            box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.12) inset;
+            border-color: var(--xhs-downloader-primary);
+            box-shadow: 0 0 0 4px rgba(var(--xhs-downloader-primary-rgb), 0.12) inset;
         }
         :where(.xhs-downloader-ui) .video-quality-radio {
             margin-right: 12px;
@@ -2123,7 +2229,56 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         return item;
     };
 
-    // 关闭弹窗函数
+    // 创建胶囊式单选设置项
+    const createSegmentedControlItem = ({label, description, options, value, name}) => {
+        const item = document.createElement('div');
+        item.className = 'setting-item';
+
+        const header = document.createElement('div');
+        header.className = 'segmented-setting-header';
+
+        const title = document.createElement('span');
+        title.className = 'setting-title';
+        title.id = `${name}-label`;
+        title.textContent = label;
+
+        const control = document.createElement('div');
+        control.className = 'segmented-control';
+        control.setAttribute('role', 'radiogroup');
+        control.setAttribute('aria-labelledby', title.id);
+
+        options.forEach(option => {
+            const optionValue = typeof option === 'object' ? option.value : option;
+            const optionLabel = typeof option === 'object' ? option.label : option;
+            const optionItem = document.createElement('label');
+            optionItem.className = 'segmented-control-option';
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = name;
+            radio.value = optionValue;
+            radio.checked = optionValue === value;
+
+            const text = document.createElement('span');
+            text.textContent = optionLabel;
+
+            optionItem.append(radio, text);
+            control.appendChild(optionItem);
+        });
+
+        const desc = document.createElement('div');
+        desc.className = 'setting-description';
+        desc.id = `${name}-description`;
+        desc.textContent = description;
+        control.setAttribute('aria-describedby', desc.id);
+
+        header.append(title, control);
+        item.append(header, desc);
+        item.getValue = () => control.querySelector('input:checked')?.value;
+        return item;
+    };
+
+    // 关闭设置弹窗
     const closeSettingsModal = () => {
         const overlay = document.getElementById('SettingsOverlay');
         if (overlay) {
@@ -2175,6 +2330,18 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
                                                          description: t.imageCheckboxSwitchDesc,
                                                          checked: GM_getValue("imageCheckboxSwitch", true),
                                                      });
+
+        const albumDownloadMode = createSegmentedControlItem({
+                                                                 label: t.albumDownloadModeLabel,
+                                                                 description: t.albumDownloadModeDesc,
+                                                                 options: Object.entries(t.albumDownloadModeOptions)
+                                                                                .map(([value, label]) => ({
+                                                                                    value,
+                                                                                    label
+                                                                                })),
+                                                                 value: config.albumDownloadMode,
+                                                                 name: 'albumDownloadMode',
+                                                             });
 
         const keepMenuVisible = createSwitchItem({
                                                      label: t.keepMenuVisibleLabel,
@@ -2250,7 +2417,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         // 组合内容
         const downloadSettings = createSettingsGroup(
             t.downloadSettingsGroup,
-            [filePack, imageCheckboxSwitch, imageDownloadFormat, videoPreference, nameFormat],
+            [filePack, imageCheckboxSwitch, albumDownloadMode, imageDownloadFormat, videoPreference, nameFormat],
             true
         );
         const extractSettings = createSettingsGroup(
@@ -2312,6 +2479,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
             updateScriptServerSwitch(scriptServerSwitch.querySelector('input').checked);
             updateImageDownloadFormat(imageDownloadFormat.querySelector('select').value.trim() || "jpeg");
             updateVideoPreference(videoPreference.querySelector('select').value);
+            updateAlbumDownloadMode(albumDownloadMode.getValue());
             updateFileNameFormat(nameFormat.getFileNameFormatKeys());
             closeSettingsModal();
         });
@@ -2358,7 +2526,7 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         display: block;
     }
     :where(.xhs-downloader-ui) .image-item.selected {
-        border-color: #2196f3;
+        border-color: var(--xhs-downloader-primary);
     }
 
     :where(.xhs-downloader-ui) .image-checkbox,
@@ -2383,8 +2551,8 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         transition: background-color 0.2s, border-color 0.2s;
     }
     :where(.xhs-downloader-ui) .image-checkbox:checked + label {
-        background: #2196f3;
-        border-color: #2196f3;
+        background: var(--xhs-downloader-primary);
+        border-color: var(--xhs-downloader-primary);
     }
     :where(.xhs-downloader-ui) .image-checkbox:checked + label::after {
         content: "✓";
@@ -2580,8 +2748,8 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
                 border-color: #e6e6e6;
             }
             :where(.xhs-downloader-ui) .list-item.selected {
-                border-color: #2196f3;
-                box-shadow: 0 0 0 4px rgba(33, 150, 243, 0.12) inset;
+                border-color: var(--xhs-downloader-primary);
+                box-shadow: 0 0 0 4px rgba(var(--xhs-downloader-primary-rgb), 0.12) inset;
             }
 
             /* 序号样式 */
@@ -2991,9 +3159,8 @@ Discord Community: https://discord.com/invite/ZYtmgKud9Y
         }
 
         .xhs-downloader-menu {
-            --xhs-downloader-primary: #2196f3;
             --xhs-downloader-on-surface: #212121;
-            --xhs-downloader-ripple-color: rgba(33, 150, 243, 0.15);
+            --xhs-downloader-ripple-color: rgba(var(--xhs-downloader-primary-rgb), 0.15);
             position: fixed;
             top: 0;
             left: 0;

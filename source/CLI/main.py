@@ -86,15 +86,15 @@ class CLI:
         return {k: v for k, v in data.items() if v is not None}
 
     @staticmethod
-    def __format_index(index: str) -> list[int]:
+    def __format_index(index: str | None) -> list[int] | None:
         if index:
             result = []
             values = index.split()
             for i in values:
                 with suppress(ValueError):
                     result.append(int(i))
-            return result
-        return []
+            return result or None
+        return None
 
     @staticmethod
     @check_value
@@ -169,7 +169,13 @@ class CLI:
                 _("图文作品文件下载格式，支持：PNG、WEBP、JPEG、HEIC、AUTO"),
             ),
             ("--live_download", "-ld", "bool", _("动态图片下载开关")),
-            ("--video_cover_download", "-vcd", "bool", _("视频封面下载开关")),
+            ("--cover_download", "-cd", "bool", _("作品封面下载开关")),
+            (
+                "--album_download_mode",
+                "-adm",
+                "choice",
+                _("以图片或视频形式下载图集作品文件，支持：images、video"),
+            ),
             (
                 "--video_preference",
                 "-vp",
@@ -315,9 +321,14 @@ class CLI:
     type=bool,
 )
 @option(
-    "--video_cover_download",
-    "-vcd",
+    "--cover_download",
+    "-cd",
     type=bool,
+)
+@option(
+    "--album_download_mode",
+    "-adm",
+    type=Choice(["images", "video"]),
 )
 @option(
     "--video_preference",
